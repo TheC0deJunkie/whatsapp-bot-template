@@ -1,0 +1,8 @@
+node_modules/
+api/index.js
+api/index.js.map
+.env
+.env.local
+.vercel
+*.log
+.DS_Store
