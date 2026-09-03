@@ -1,0 +1,18 @@
+node_modules/
+api/index.js
+api/index.js.map
+.env
+.env.local
+.env.*.local
+.vercel
+*.log
+.DS_Store
+
+# Prisma SQLite (dev only — schema and migrations stay tracked)
+prisma/dev.db
+prisma/dev.db-journal
+
+# Local Claude Code session/IDE state
+.claude/
+.env*.local
+.vercel-token

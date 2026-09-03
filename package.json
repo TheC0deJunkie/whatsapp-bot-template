@@ -1,0 +1,37 @@
+{
+  "name": "whatsapp-bot-template",
+  "version": "1.0.0",
+  "description": "Provider-agnostic WhatsApp menu bot template — Twilio/Meta adapters, Prisma session store, numbered-menu resolver, cron skeleton",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "start": "node api/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "seed": "tsx scripts/seed.ts",
+    "webhook:local": "tsx scripts/switch-webhook.ts local",
+    "webhook:prod": "tsx scripts/switch-webhook.ts prod"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "@sentry/node": "^10.58.0",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.0",
+    "luxon": "^3.7.2",
+    "prisma": "^6.19.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/luxon": "^3.7.1",
+    "@types/node": "^22.19.17",
+    "esbuild": "^0.24.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.4"
+  }
+}

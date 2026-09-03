@@ -1,0 +1,21 @@
+{
+  "buildCommand": "node build.mjs",
+  "outputDirectory": ".",
+  "functions": {
+    "api/index.js": {
+      "memory": 256,
+      "maxDuration": 30,
+      "includeFiles": "node_modules/.prisma/client/**"
+    }
+  },
+  "rewrites": [
+    { "source": "/webhook", "destination": "/api/index" },
+    { "source": "/health", "destination": "/api/index" },
+    { "source": "/keep-alive", "destination": "/api/index" },
+    { "source": "/debug/:path*", "destination": "/api/index" },
+    { "source": "/api/(.*)", "destination": "/api/index" }
+  ],
+  "crons": [
+    { "path": "/api/cron-tick", "schedule": "0 7 * * *" }
+  ]
+}

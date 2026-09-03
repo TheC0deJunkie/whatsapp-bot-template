@@ -1,0 +1,134 @@
+// Prisma schema — WhatsApp bot template core models.
+//
+// Provider: Postgres. Dev and prod use the same provider; only the
+// DATABASE_URL differs (e.g. a Neon dev branch vs the prod branch).
+//
+// These are the FRAMEWORK models — session state, message log, delivery
+// tracking, inbound dedup, cron heartbeat. Add your domain models below them.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Canonical user. Identity is the normalized E.164 phone number.
+// waId is the provider-specific artifact (Twilio/Meta "wa_id"); kept
+// separately so it is never confused with the stable identity.
+model User {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  waId      String?
+  firstName String?
+  surname   String?
+  timezone  String? // IANA tz (e.g. "Africa/Johannesburg"). Null → env DEFAULT_TIMEZONE.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session  BotSession?
+  messages Message[]
+
+  @@index([waId])
+}
+
+// Hot-path session state. id = sessionKey (normalized E.164).
+// Mirrors the in-memory map so serverless cold starts recover.
+//
+// draft* columns hold in-flight flow values so a cold start between two
+// steps of a multi-step flow doesn't wipe progress. To add a new draft
+// field there are exactly THREE places to touch:
+//   1. a column here,
+//   2. the DurableFields interface (src/core/types.ts),
+//   3. the get()/persist() mapping in src/adapters/prisma-store.ts.
+model BotSession {
+  id             String    @id
+  botStatus      String    @default("idle")
+  lastMenu       String? // JSON-serialized MenuButton[] for numbered-reply resolution
+  lastMessageAt  DateTime?
+  draftFirstName String?
+  draftSurname   String?
+  // Durable per-recipient sender: the E.164 of OUR number the user last texted.
+  // Lets outbound jobs (cron) pin their `From` line to the sender each user
+  // actually paired with — critical when running prod + sandbox senders on
+  // one deployment.
+  lastSenderFrom String?
+  updatedAt      DateTime  @updatedAt
+
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String? @unique
+}
+
+// Full inbound/outbound message log.
+model Message {
+  id        String   @id @default(cuid())
+  phone     String
+  userId    String?
+  direction String // 'inbound' | 'outbound'
+  body      String
+  method    String? // sendText | sendInteractive | ... — null for inbound rows
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([phone, createdAt])
+}
+
+// Delivery lifecycle per outbound send. Seeded at send time (status:'sent');
+// updated by provider status callbacks. Keyed by provider SID — the unique
+// constraint drives upsert idempotency.
+//
+// status lifecycle (mirrors Twilio's callback sequence):
+//   sent → delivered | read | failed | undelivered | queued
+model MessageDelivery {
+  id           String    @id @default(cuid())
+  sid          String    @unique // provider message SID (e.g. Twilio SM...)
+  phone        String // normalized E.164 of the recipient
+  userId       String? // nullable — not always resolvable at send time
+  method       String? // sendText | sendInteractive | sendMedia | sendTemplate | sendContentTemplate
+  direction    String    @default("outbound")
+  status       String    @default("sent") // queued|sent|delivered|read|failed|undelivered
+  errorCode    String? // provider error code (e.g. "63016") — stored as string
+  errorMessage String?
+  sentAt       DateTime  @default(now())
+  deliveredAt  DateTime?
+  readAt       DateTime?
+  failedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([phone, createdAt])
+}
+
+// Idempotency dedup for inbound webhooks. One row per inbound MessageSid.
+// The engine attempts an insert before processing; a P2002 unique-violation
+// means the provider redelivered the same webhook → skip.
+//
+// RETENTION: rows are prunable after a short window (e.g. 7 days) — provider
+// retries happen within minutes. @@index([receivedAt]) supports a prune job.
+model InboundDedup {
+  messageSid String   @id
+  receivedAt DateTime @default(now())
+
+  @@index([receivedAt])
+}
+
+// Per-tick cron run log. One row per /api/cron-tick invocation (success and
+// error paths). A TRUE heartbeat: the latest row proves the tick RAN even
+// when zero work was due.
+model CronRun {
+  id           String   @id @default(cuid())
+  startedAt    DateTime
+  finishedAt   DateTime
+  durationMs   Int
+  ok           Boolean
+  tasksRun     Int      @default(0)
+  errorMessage String?
+
+  @@index([startedAt])
+}
